@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, LogOut, Users, Download } from 'lucide-react';
+import { Plus, LogOut, Users, Download, Database } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import database from '../../db/database';
 import ContactCard from './ContactCard';
@@ -166,6 +166,21 @@ const ContactList = () => {
     showToast(`Exported ${contacts.length} contacts to CSV`, 'success');
   };
 
+  const exportDatabaseFile = async () => {
+    try {
+      const success = await database.exportDatabaseFile();
+      if (success) {
+        showToast('Database exported successfully!', 'success');
+      }
+    } catch (error) {
+      if (error.message.includes('not supported')) {
+        showToast('File System API not supported in this browser', 'error');
+      } else {
+        showToast('Failed to export database', 'error');
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Header */}
@@ -182,6 +197,10 @@ const ContactList = () => {
               </div>
             </div>
             <div className="flex gap-3">
+              <Button variant="secondary" onClick={exportDatabaseFile}>
+                <Database className="w-4 h-4 mr-2" />
+                Export DB
+              </Button>
               <Button variant="secondary" onClick={exportToCSV}>
                 <Download className="w-4 h-4 mr-2" />
                 Export CSV

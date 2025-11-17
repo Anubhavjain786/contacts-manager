@@ -2,6 +2,7 @@ class Database {
   constructor() {
     this.db = null;
     this.SQL = null;
+    this.fileHandle = null;
   }
 
   // Simple hash function for browser (not cryptographically secure, but works for demo)
@@ -25,6 +26,11 @@ class Database {
     });
   }
 
+  // Check if File System Access API is supported
+  supportsFileSystemAccess() {
+    return "showSaveFilePicker" in window && "showOpenFilePicker" in window;
+  }
+
   async init() {
     try {
       // Load sql.js from CDN (more reliable for browser)
@@ -34,21 +40,86 @@ class Database {
         locateFile: (file) => `https://sql.js.org/dist/${file}`,
       });
 
-      // Try to load existing database from IndexedDB
-      const savedDb = await this.loadFromIndexedDB();
-
-      if (savedDb) {
-        this.db = new this.SQL.Database(savedDb);
-      } else {
-        this.db = new this.SQL.Database();
-        await this.createTables();
-        await this.createDefaultUser();
-      }
+      // Always start with IndexedDB (File System Access requires user gesture)
+      console.log("Initializing with IndexedDB...");
+      await this.initWithIndexedDB();
 
       return true;
     } catch (error) {
       console.error("Database initialization failed:", error);
       throw error;
+    }
+  }
+
+  async initWithFileSystem() {
+    try {
+      // This method is now called manually when user clicks a button
+      this.fileHandle = await this.requestFileAccess();
+
+      if (!this.fileHandle) {
+        throw new Error("No file selected");
+      }
+
+      // Load database from file
+      const file = await this.fileHandle.getFile();
+      const arrayBuffer = await file.arrayBuffer();
+
+      if (arrayBuffer.byteLength > 0) {
+        // Load existing database
+        this.db = new this.SQL.Database(new Uint8Array(arrayBuffer));
+        console.log("Loaded existing database from file");
+      } else {
+        // Create new database
+        this.db = new this.SQL.Database();
+        await this.createTables();
+        await this.createDefaultUser();
+        await this.saveToFile();
+        console.log("Created new database file");
+      }
+    } catch (error) {
+      if (error.name === "AbortError") {
+        console.log("User cancelled file selection, falling back to IndexedDB");
+        await this.initWithIndexedDB();
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  async requestFileAccess() {
+    const options = {
+      types: [
+        {
+          description: "SQLite Database",
+          accept: { "application/x-sqlite3": [".db", ".sqlite", ".sqlite3"] },
+        },
+      ],
+      suggestedName: "contacts.db",
+    };
+
+    try {
+      // Try to open existing file
+      const [handle] = await window.showOpenFilePicker({
+        types: options.types,
+        multiple: false,
+      });
+      return handle;
+    } catch (e) {
+      // If user cancels or file doesn't exist, create new file
+      return await window.showSaveFilePicker(options);
+    }
+  }
+
+  async initWithIndexedDB() {
+    // Fallback to IndexedDB
+    const savedDb = await this.loadFromIndexedDB();
+
+    if (savedDb) {
+      this.db = new this.SQL.Database(savedDb);
+    } else {
+      this.db = new this.SQL.Database();
+      await this.createTables();
+      await this.createDefaultUser();
     }
   }
 
@@ -86,7 +157,7 @@ class Database {
       "admin",
       hashedPassword,
     ]);
-    await this.saveToIndexedDB();
+    await this.saveToDisk();
   }
 
   // User methods
@@ -121,7 +192,7 @@ class Database {
       [name, email || "", phone || "", company || "", location || "", tagsJson]
     );
 
-    await this.saveToIndexedDB();
+    await this.saveToDisk();
     return this.getLastInsertId();
   }
 
@@ -188,13 +259,13 @@ class Database {
       ]
     );
 
-    await this.saveToIndexedDB();
+    await this.saveToDisk();
     return true;
   }
 
   async deleteContact(id) {
     this.db.run("DELETE FROM contacts WHERE id = ?", [id]);
-    await this.saveToIndexedDB();
+    await this.saveToDisk();
     return true;
   }
 
@@ -229,7 +300,96 @@ class Database {
     return result[0].values[0][0];
   }
 
-  // IndexedDB persistence
+  // Method to manually switch to file-based storage
+  async switchToFileStorage() {
+    if (!this.supportsFileSystemAccess()) {
+      throw new Error(
+        "File System Access API is not supported in this browser"
+      );
+    }
+
+    try {
+      this.fileHandle = await this.requestFileAccess();
+
+      if (this.fileHandle) {
+        // Save current database to the file
+        await this.saveToFile();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Failed to switch to file storage:", error);
+      throw error;
+    }
+  }
+
+  // Method to export database to a file (one-time download)
+  async exportDatabaseFile() {
+    if (!this.supportsFileSystemAccess()) {
+      throw new Error(
+        "File System Access API is not supported in this browser"
+      );
+    }
+
+    try {
+      const options = {
+        types: [
+          {
+            description: "SQLite Database",
+            accept: { "application/x-sqlite3": [".db", ".sqlite", ".sqlite3"] },
+          },
+        ],
+        suggestedName: `contacts_backup_${
+          new Date().toISOString().split("T")[0]
+        }.db`,
+      };
+
+      const handle = await window.showSaveFilePicker(options);
+      const writable = await handle.createWritable();
+      const data = this.db.export();
+      await writable.write(data);
+      await writable.close();
+
+      return true;
+    } catch (error) {
+      if (error.name === "AbortError") {
+        return false; // User cancelled
+      }
+      throw error;
+    }
+  }
+
+  // Save to disk (File System Access API or IndexedDB fallback)
+  async saveToDisk() {
+    if (this.fileHandle) {
+      await this.saveToFile();
+    } else {
+      await this.saveToIndexedDB();
+    }
+  }
+
+  // Save to actual file using File System Access API
+  async saveToFile() {
+    if (!this.fileHandle) {
+      console.log("No file handle, falling back to IndexedDB");
+      await this.saveToIndexedDB();
+      return;
+    }
+
+    try {
+      const writable = await this.fileHandle.createWritable();
+      const data = this.db.export();
+      await writable.write(data);
+      await writable.close();
+      console.log("Database saved to file successfully");
+    } catch (error) {
+      console.error("Failed to save to file:", error);
+      // Fallback to IndexedDB
+      await this.saveToIndexedDB();
+    }
+  }
+
+  // IndexedDB persistence (fallback)
   async saveToIndexedDB() {
     const data = this.db.export();
     const dbName = "contacts-manager-db";

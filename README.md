@@ -8,15 +8,19 @@ A modern, web-based contacts management application built with React, Tailwind C
 - 📇 Complete CRUD operations for contacts
 - 🏷️ Tag-based organization
 - 🔍 Search and filter functionality
-- 💾 Local SQLite database (no cloud, no servers)
+- 💾 **SQLite database** stored in browser (IndexedDB)
+- 📁 **Export database to `.db` file** - save a real SQLite file to your computer!
+- 📤 Export contacts to CSV
 - 🎨 Beautiful UI with Tailwind CSS
 - 📱 Responsive design
+- 🔒 100% local - no cloud, no servers
 
 ## Tech Stack
 
 - **Frontend**: React 18
 - **Styling**: Tailwind CSS
-- **Database**: SQLite (sql.js)
+- **Database**: SQLite (sql.js) with IndexedDB persistence
+- **Export**: File System Access API for database export
 - **Bundler**: Vite
 - **Icons**: Lucide React
 
@@ -25,6 +29,7 @@ A modern, web-based contacts management application built with React, Tailwind C
 ### Prerequisites
 
 - Node.js 18+ and npm
+- A modern browser (Chrome, Edge, Firefox, Safari)
 
 ### Installation
 
@@ -39,6 +44,11 @@ npm run dev
 ```
 
 3. Open your browser and navigate to `http://localhost:5173`
+
+4. **Database Storage**: 
+   - Data is automatically saved to your browser's IndexedDB
+   - Click **"Export DB"** button to save a `.db` file to your computer anytime
+   - The exported file is a real SQLite database you can open with any SQLite tool!
 
 ### Default Login Credentials
 
@@ -77,9 +87,27 @@ contacts-manager/
 
 ### Database
 
-- All data stored locally in browser using IndexedDB
-- No external servers or cloud services required
-- Automatic persistence
+- **SQLite Database**: Real SQLite database running in your browser
+- **IndexedDB Persistence**: All data automatically saved to browser storage
+- **Export to .db File**: Click "Export DB" to save a real SQLite file to disk
+  - Compatible with [DB Browser for SQLite](https://sqlitebrowser.org/)
+  - Can be opened with any SQLite tool
+  - Perfect for backups or sharing
+- **Export to CSV**: Export contacts in CSV format for Excel/Google Sheets
+- No external servers or cloud services
+- 100% local and private
+
+### Export Options
+
+1. **Export DB** - Saves the entire SQLite database as a `.db` file
+   - Use this for complete backups
+   - Can re-import into other SQLite tools
+   - Preserves all data structure
+
+2. **Export CSV** - Exports contacts to CSV format
+   - Use for importing to other contact managers
+   - Compatible with Excel, Google Sheets, etc.
+   - Human-readable format
 
 ## Build
 
